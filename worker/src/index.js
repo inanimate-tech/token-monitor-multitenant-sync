@@ -214,6 +214,46 @@ export class HubDO {
     return String(this.env.TOKEN_MONITOR_SECRET || '').trim();
   }
 
+  // Extension point: the gate in front of every data route. Returns a refusal
+  // Response, or null to serve the request. A subclass that authenticates in its
+  // own front Worker may override it, because a Durable Object is reachable only
+  // through the Worker that binds it.
+  async authorize(request) {
+    // A Worker is an internet-facing URL with no trusted-LAN fallback, so it must
+    // never serve data unauthenticated. Without a secret every data route is refused
+    // (health and the opt-in, already-scrubbed /api/public/stats are served before this).
+    if (!this.secret) {
+      return jsonResponse(503, { error: 'secret_required', message: 'TOKEN_MONITOR_SECRET must be set on the worker; unauthenticated access is refused.' });
+    }
+    if (!(await isAuthorized(request, this.secret))) return jsonResponse(401, { error: 'unauthorized' });
+    return null;
+  }
+
+  // Extension point: called after an ingest has been merged and stored, with
+  // { deviceId, previous, next }. These are the stored device records before and
+  // after the merge, not the raw upload; `previous` is null for a new device, and
+  // a limits-only ingest carries usage (and its updatedAt) forward unchanged.
+  // Both records have session text stripped, so an observer cannot leak titles
+  // whatever the title policy. A no-op here; a subclass may override it.
+  async onIngested(_event) {}
+
+  // Runs outside the mutation lane and never awaits, so a slow or failing
+  // observer can neither delay the ingest response nor reset the Durable Object.
+  // Durable Objects stay alive for pending work, so no waitUntil is needed.
+  notifyIngested(previous, next) {
+    // Compared with the default rather than called as `onIngested?.()`: without
+    // an override, skip stripping two full records on every ingest.
+    if (this.onIngested === HubDO.prototype.onIngested) return;
+    const event = {
+      deviceId: next.deviceId,
+      previous: previous ? stripSessionTextFromDeviceRecord(previous) : null,
+      next: stripSessionTextFromDeviceRecord(next)
+    };
+    Promise.resolve()
+      .then(() => this.onIngested(event))
+      .catch((error) => console.error('onIngested failed', error));
+  }
+
   get staleAfterMs() {
     return Number(this.env.STALE_AFTER_MS || DEFAULT_STALE_AFTER_MS);
   }
@@ -371,13 +411,8 @@ export class HubDO {
       }, { 'cache-control': 'public, max-age=15, s-maxage=15' }, request);
     }
 
-    // A Worker is an internet-facing URL with no trusted-LAN fallback, so it must
-    // never serve data unauthenticated. Without a secret every data route is refused
-    // (health and the opt-in, already-scrubbed /api/public/stats are handled above).
-    if (!this.secret) {
-      return jsonResponse(503, { error: 'secret_required', message: 'TOKEN_MONITOR_SECRET must be set on the worker; unauthenticated access is refused.' });
-    }
-    if (!(await isAuthorized(request, this.secret))) return jsonResponse(401, { error: 'unauthorized' });
+    const refusal = await this.authorize(request);
+    if (refusal) return refusal;
 
     if ((request.method === 'GET' || request.method === 'HEAD') && url.pathname === '/api/sync/content') {
       return jsonResponse(200, syncContent.syncContentCapability(this.syncSessionTitles));
@@ -453,16 +488,17 @@ export class HubDO {
       catch (error) { return jsonResponse(400, { error: 'bad_request', message: error.message }); }
       if (!payload || (!payload.deviceId && !payload.id)) return jsonResponse(400, { error: 'deviceId_required' });
       const deviceId = String(payload.deviceId || payload.id);
-      const record = await this.mutate(async () => {
+      const { previous, record } = await this.mutate(async () => {
         const policy = await this.state.storage.get(`${TITLE_POLICY_PREFIX}${deviceId}`);
         const existing = await this.state.storage.get(`dev:${deviceId}`);
         const next = mergeSyncDeviceRecord(existing, { ...payload, receivedAt: new Date().toISOString() }, {
           preserveSessionTitles: syncContent.acceptsSessionTitles(this.syncSessionTitles, policy, payload.sessionTitleSyncGeneration)
         });
         await this.state.storage.put(`dev:${next.deviceId}`, next);
-        return next;
+        return { previous: existing || null, record: next };
       });
       this.queueBroadcast();
+      this.notifyIngested(previous, record);
       const response = { ok: true, deviceId: record.deviceId };
       return jsonResponse(
         200,
