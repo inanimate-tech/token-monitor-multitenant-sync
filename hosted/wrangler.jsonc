@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "token-monitor-hosted",
+  "name": "token-monitor-sync",
   "main": "./src/server.ts",
   "compatibility_date": "2026-10-01",
   // nodejs_compat populates process.env from bindings, which is where Clerk reads its keys.
