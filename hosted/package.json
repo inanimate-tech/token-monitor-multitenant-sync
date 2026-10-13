@@ -1,0 +1,37 @@
+{
+  "name": "token-monitor-hosted",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "deploy": "vite build && wrangler deploy",
+    "types": "wrangler types",
+    "typecheck": "wrangler types && tsc --noEmit",
+    "test": "node --test \"tests/**/*.test.ts\""
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "dependencies": {
+    "@clerk/tanstack-react-start": "^1.7.1",
+    "@tanstack/react-router": "^1.170.44",
+    "@tanstack/react-start": "^1.169.1",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.63.2",
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
+    "wrangler": "^4.150.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "workerd@1.20261006.1": true
+  }
+}

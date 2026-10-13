@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "token-monitor-hosted",
+  "main": "./src/server.ts",
+  "compatibility_date": "2026-10-01",
+  // nodejs_compat populates process.env from bindings, which is where Clerk reads its keys.
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  "durable_objects": {
+    "bindings": [
+      { "name": "HUB", "class_name": "TenantHub" },
+      { "name": "ACCOUNTS", "class_name": "Account" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["TenantHub", "Account"] }],
+  // Per-account limit on Hub API requests (widgets upload every few seconds while active).
+  "ratelimits": [{ "name": "HUB_LIMITER", "namespace_id": "1001", "simple": { "limit": 300, "period": 60 } }],
+  "vars": {
+    // Your Clerk publishable key. CLERK_SECRET_KEY must be a secret (wrangler secret put).
+    "CLERK_PUBLISHABLE_KEY": ""
+  }
+  // Optional: forward tokens per minute to hawthorn (see src/syndication/hawthorn.ts).
+  // "services": [{ "binding": "HAWTHORN", "service": "hawthorn", "entrypoint": "TokenMonitorUsage" }]
+}
