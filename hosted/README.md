@@ -4,7 +4,7 @@ A multitenant [Token Monitor](https://github.com/Javis603/token-monitor) sync Hu
 
 ## Deploy
 
-You need a Cloudflare account and a [Clerk](https://clerk.com) application. Put its publishable key in `CLERK_PUBLISHABLE_KEY` under `vars` in `wrangler.jsonc`, then either:
+You need a Cloudflare account and a [Clerk](https://clerk.com) application. Nothing account-specific is committed: both Clerk keys are set per deployment. Then either:
 
 - **Build on push** (Cloudflare dashboard → Workers → Create → Import a repository), with:
   - Production branch: `multitenant`
@@ -13,8 +13,8 @@ You need a Cloudflare account and a [Clerk](https://clerk.com) application. Put 
   - Build watch paths: `hosted/*` and `worker/*` (the Hub code is bundled from `worker/`)
   - The Worker name must match `name` in `wrangler.jsonc`.
 
-  Then add `CLERK_SECRET_KEY` as a secret under the Worker's Settings → Variables and Secrets.
-- **Deploy by hand**: `cd hosted && npm ci && npx wrangler secret put CLERK_SECRET_KEY && npm run deploy`.
+  Then add `CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` as secrets under the Worker's Settings → Variables and Secrets.
+- **Deploy by hand**: `cd hosted && npm ci && npm run deploy`, then `npx wrangler secret put` each Clerk key.
 
 It uses Durable Objects only — no KV, D1 or other services. Add a custom domain in the dashboard; with a production Clerk instance, sign-in works on subdomains of the Clerk app's domain. The footer links the deployed commit (`WORKERS_CI_COMMIT_SHA` on Workers Builds, the local checkout otherwise), so deploy from pushed commits.
 
