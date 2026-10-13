@@ -30,6 +30,14 @@ async function hub(request: Request): Promise<Response> {
   return env.HUB.getByName(key.accountId).fetch(request)
 }
 
+// Clerk fails with a generic 500 when a key is missing; say which instead. It reads
+// process.env, which nodejs_compat fills from the Worker's secrets.
+function site(request: Request) {
+  const missing = ['CLERK_PUBLISHABLE_KEY', 'CLERK_SECRET_KEY'].filter((name) => !process.env[name])
+  if (missing.length) return new Response(`Missing Worker secrets: ${missing.join(', ')} (see hosted/README.md).\n`, { status: 503 })
+  return handler.fetch(request)
+}
+
 export default createServerEntry({
-  fetch: (request) => (new URL(request.url).pathname.startsWith('/api/') ? hub(request) : handler.fetch(request)),
+  fetch: (request) => (new URL(request.url).pathname.startsWith('/api/') ? hub(request) : site(request)),
 })
