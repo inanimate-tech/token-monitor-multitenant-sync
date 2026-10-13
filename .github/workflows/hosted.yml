@@ -1,11 +1,10 @@
 name: Hosted
 
-# Fork-only: checks hosted/ and, when enabled, deploys it from main. Deploying only
-# from this public workflow means every running build has a public commit and log.
+# Fork-only: checks hosted/. Deploys are Cloudflare Workers Builds (see hosted/README.md).
 
 on:
   push:
-    branches: [main]
+    branches: [multitenant]
     paths: ['hosted/**', 'worker/src/**', '.github/workflows/hosted.yml']
   pull_request:
     paths: ['hosted/**', 'worker/src/**', '.github/workflows/hosted.yml']
@@ -36,22 +35,3 @@ jobs:
       - run: npm test
       - run: npm run build
 
-  deploy:
-    # Opt in with repository variable HOSTED_DEPLOY=true and secrets
-    # CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID.
-    if: github.event_name == 'push' && vars.HOSTED_DEPLOY == 'true'
-    needs: check
-    runs-on: ubuntu-latest
-    environment: hosted
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: npm
-          cache-dependency-path: hosted/package-lock.json
-      - run: npm ci
-      - run: npm run deploy
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

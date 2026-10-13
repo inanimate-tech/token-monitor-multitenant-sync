@@ -4,19 +4,19 @@ A multitenant [Token Monitor](https://github.com/Javis603/token-monitor) sync Hu
 
 ## Deploy
 
-You need a Cloudflare account and a [Clerk](https://clerk.com) application.
+You need a Cloudflare account and a [Clerk](https://clerk.com) application. Nothing account-specific is committed: both Clerk keys are set per deployment. Then either:
 
-```bash
-cd hosted
-npm ci
-# set CLERK_PUBLISHABLE_KEY in wrangler.jsonc vars
-npx wrangler secret put CLERK_SECRET_KEY
-npm run deploy
-```
+- **Build on push** (Cloudflare dashboard → Workers → Create → Import a repository), with:
+  - Production branch: `multitenant`
+  - Root directory: `hosted`
+  - Build command: `npm run build`; deploy command: `npx wrangler deploy`
+  - Build watch paths: `hosted/*` and `worker/*` (the Hub code is bundled from `worker/`)
+  - The Worker name must match `name` in `wrangler.jsonc`.
 
-That uses Durable Objects only — no KV, D1 or other services. Add a custom domain in the Cloudflare dashboard; with a production Clerk instance, sign-in works on subdomains of the Clerk app's domain.
+  Then add `CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` as secrets under the Worker's Settings → Variables and Secrets.
+- **Deploy by hand**: `cd hosted && npm ci && npm run deploy`, then `npx wrangler secret put` each Clerk key.
 
-To deploy from CI instead, set the repository variable `HOSTED_DEPLOY=true` and the secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`; `.github/workflows/hosted.yml` then deploys every push to `main`.
+It uses Durable Objects only — no KV, D1 or other services. Add a custom domain in the dashboard; with a production Clerk instance, sign-in works on subdomains of the Clerk app's domain. The footer links the deployed commit (`WORKERS_CI_COMMIT_SHA` on Workers Builds, the local checkout otherwise), so deploy from pushed commits.
 
 Optional: bind a usage sink (see `src/syndication/` and the commented binding in `wrangler.jsonc`) to offer users an opt-in that sends their live tokens per minute to it. Without one, nothing is sent anywhere.
 

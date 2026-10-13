@@ -5,7 +5,8 @@ import viteReact from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
 // Stamped into the footer so users can find the exact source they are using.
-const commit = process.env.GITHUB_SHA || execSync('git rev-parse HEAD').toString().trim()
+// Cloudflare Workers Builds sets WORKERS_CI_COMMIT_SHA; elsewhere use the checkout.
+const commit = process.env.WORKERS_CI_COMMIT_SHA || execSync('git rev-parse HEAD').toString().trim()
 const source = process.env.SOURCE_URL || 'https://github.com/inanimate-tech/token-monitor-multitenant-sync'
 
 export default defineConfig({

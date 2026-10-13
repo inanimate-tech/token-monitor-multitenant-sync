@@ -79,7 +79,7 @@ Open: whether `totalTokens` (cache reads dominate it) or `totalTokens − cacheR
 
 One page: sign in; Hub URL and setup instructions; create (shown once), list and revoke keys; the syndication opt-in with an example payload. The footer links the deployed commit. Server functions take the user only from the Clerk session; TanStack Start's default CSRF middleware covers them.
 
-Deploys run only from `.github/workflows/hosted.yml` on the public fork, so every running build has a public commit and log. Users still cannot verify deployed bytes independently.
+Deploys are Cloudflare Workers Builds from the public `multitenant` branch, and the footer links the commit each build came from. Build logs stay in the Cloudflare dashboard, so users cannot verify deployed bytes independently; `.github/workflows/hosted.yml` only runs the checks.
 
 ## Status
 
