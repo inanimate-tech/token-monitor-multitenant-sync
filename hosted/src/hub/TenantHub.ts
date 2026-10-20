@@ -23,6 +23,12 @@ export class TenantHub extends HubDO {
     return this.event(Date.now())
   }
 
+  // When a device last uploaded, or null: for the sink's status check, which doesn't subscribe.
+  async lastUploadAt(): Promise<string | null> {
+    const devices: { receivedAt?: string }[] = await this.listDevices()
+    return devices.flatMap((d) => (d.receivedAt ? [d.receivedAt] : [])).sort().at(-1) ?? null
+  }
+
   async onIngested({ deviceId, previous, next }: { deviceId: string; previous: object | null; next: object }) {
     const sink = usageSink(this.env)
     const accountId = this.state.id.name

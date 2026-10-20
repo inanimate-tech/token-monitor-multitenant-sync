@@ -21,7 +21,7 @@ function tenantHub(storage = new Map<string, unknown>(), answers: (boolean | Pro
     storage: {
       get: async (key: string) => storage.get(key),
       put: async (key: string, value: unknown) => void storage.set(key, value),
-      list: async () => new Map(),
+      list: async ({ prefix }: { prefix?: string } = {}) => new Map([...storage].filter(([key]) => !prefix || key.startsWith(prefix))),
     },
   }
   const HAWTHORN = { publish: async (_userId: string, event: unknown) => (published.push(event), answers.shift() ?? true) }
@@ -57,4 +57,13 @@ test('a subscribe that arrives while the sink answers no wins', async () => {
   answer(false)
   await publishing
   assert.equal(storage.get('subscribed'), true)
+})
+
+test('the last upload is the latest across devices, or null', async () => {
+  const storage = new Map<string, unknown>()
+  const { hub } = tenantHub(storage)
+  assert.equal(await hub.lastUploadAt(), null)
+  storage.set('dev:mac', { deviceId: 'mac', receivedAt: '2026-10-20T10:00:00.000Z' })
+  storage.set('dev:studio', { deviceId: 'studio', receivedAt: '2026-10-20T11:00:00.000Z' })
+  assert.equal(await hub.lastUploadAt(), '2026-10-20T11:00:00.000Z')
 })

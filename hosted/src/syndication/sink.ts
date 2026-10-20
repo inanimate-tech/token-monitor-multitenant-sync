@@ -24,9 +24,19 @@ export function usageSink(env: Env): UsageSink | null {
 }
 
 // The sink's way in, over a service binding: it subscribes to an account and gets
-// the current event back. Nothing else, so it never reaches a Hub's data.
+// the current event back, or asks whether the account is set up and syncing (how
+// many keys, and when a device last uploaded). Nothing else, so it never reaches a
+// Hub's data.
 export class Subscriptions extends WorkerEntrypoint<Env> {
   subscribe(accountId: string): Promise<UsageEvent> {
     return this.env.HUB.getByName(accountId).subscribe()
+  }
+
+  async status(accountId: string): Promise<{ keys: number; lastUploadAt: string | null }> {
+    const [keys, lastUploadAt] = await Promise.all([
+      this.env.ACCOUNTS.getByName(accountId).listKeys(),
+      this.env.HUB.getByName(accountId).lastUploadAt(),
+    ])
+    return { keys: keys.length, lastUploadAt }
   }
 }
