@@ -67,3 +67,15 @@ test('the last upload is the latest across devices, or null', async () => {
   storage.set('dev:studio', { deviceId: 'studio', receivedAt: '2026-10-20T11:00:00.000Z' })
   assert.equal(await hub.lastUploadAt(), '2026-10-20T11:00:00.000Z')
 })
+
+test('a restarted Hub carries on from the stored window', async () => {
+  const storage = new Map<string, unknown>()
+  const { hub } = tenantHub(storage)
+  await hub.subscribe()
+  await hub.onIngested(ingest(1, 2000))
+  await hub.onIngested(ingest(2, 3000))
+  const restarted = tenantHub(storage)
+  await restarted.hub.onIngested({ deviceId: 'mac', previous: record('2026-10-20T10:02:00Z', 3000), next: record('2026-10-20T10:03:00Z', 3000) })
+  // Over the stored two-minute window (10:01 → 10:03, 1000 tokens), not the one gap with no change, which reads 0.
+  assert.equal((restarted.published.at(-1) as { tokensPerMinute: number }).tokensPerMinute, 500)
+})

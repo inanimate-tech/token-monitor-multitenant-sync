@@ -10,7 +10,8 @@ export class TenantHub extends HubDO {
   declare state: DurableObjectState
   declare env: Env
   rates = new Map<string, DeviceRate>()
-  // Each device's recent readings; in memory, so an evicted Hub starts again from the previous record.
+  // Each device's recent readings, kept in storage too: live logs showed the Hub restarting
+  // every minute or so, and a window started again from one gap can read zero.
   windows = new Map<string, Reading[]>()
   subscribed?: boolean
   subscribes = 0
@@ -41,8 +42,13 @@ export class TenantHub extends HubDO {
   async onIngested({ deviceId, previous, next }: { deviceId: string; previous: DeviceRecord | null; next: DeviceRecord }) {
     const sink = usageSink(this.env)
     const accountId = this.state.id.name
-    const window = nextWindow(this.windows.get(deviceId) ?? [], previous, next)
-    if (window) this.windows.set(deviceId, window)
+    const restarted = !this.windows.has(deviceId)
+    const held = this.windows.get(deviceId) ?? (await this.state.storage.get<Reading[]>(`window:${deviceId}`)) ?? []
+    const window = nextWindow(held, previous, next)
+    if (window) {
+      this.windows.set(deviceId, window)
+      await this.state.storage.put(`window:${deviceId}`, window)
+    }
     const rate = window ? windowRate(window) : null
     log('ingested', {
       account: accountId,
@@ -56,6 +62,7 @@ export class TenantHub extends HubDO {
       uploadIntervalMs: next.syncUploadIntervalMs ?? null,
       rate,
       ratesHeld: this.rates.size,
+      restarted,
     })
     if (!sink || !accountId) return
     if (rate === null) return
