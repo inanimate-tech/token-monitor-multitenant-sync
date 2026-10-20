@@ -20,3 +20,17 @@ Draft PR body:
 > No wire, endpoint, settings or env changes. `docs/architecture.md` (Entry points) documents both. The Worker adapter's Hub build revision moves.
 >
 > Tests: `tests/worker/extensionPoints.test.js` (subclass gate, previous/next pairs, refused ingests not observed, failing observer isolated, session text stripped). `npm run verify`.
+
+## HubDO extends DurableObject
+
+Commit: `refactor(worker): extend DurableObject in HubDO`
+
+Draft PR title: `refactor(worker): extend DurableObject in HubDO`
+
+Draft PR body:
+
+> `HubDO` was a plain class, the original Durable Object interface, which only offers `fetch`. Extending `DurableObject` from `cloudflare:workers` lets a Worker that embeds the Hub add RPC methods in a subclass (for example a method another Worker calls over a service binding), alongside the existing extension points.
+>
+> No behaviour, wire or storage change: `fetch` still serves everything, and `this.state` stays as the constructor's first argument (the base class also sets `this.ctx` and `this.env`). Plain Node cannot resolve `cloudflare:workers`, so the tests that load the Worker module require `tests/helpers/cloudflareWorkers.js`, a resolve hook standing in a minimal `DurableObject`; single test files still run with plain `node --test`. The Worker adapter's Hub build revision moves.
+>
+> Tests: the existing Worker and Hub suites; checked in `wrangler dev` (health, ingest, reads, auth). `npm run verify`.
