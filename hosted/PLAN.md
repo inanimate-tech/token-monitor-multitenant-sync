@@ -59,14 +59,13 @@ Until upstream registers a build containing the hooks, `/api/health` reports `hu
 
 A live rate, not the widget's active-time average (`tokenBurnPerMinute` in `src/electron/renderer/tokenRatePresentation.js` is `timedTokens / timedDurationMs`); the page says the two differ.
 
-Per device, over a sliding two-minute window of the readings `onIngested` sees (a reading: `updatedAt` and today's counted tokens):
+Per device, the counted tokens it used over the minute ending now:
 
 - Counted tokens are `totalTokens − cacheReadTokens`. Live data showed cache reads dominate the total (about a million a minute while working), which isn't what people mean.
-- The rate is the change in counted tokens from the window's first reading to its last, over the time between them. The window keeps the readings within two minutes of the latest and the one before them. Not consecutive uploads: tokens arrive a turn at a time while the widget uploads every 7–20 s, so most consecutive pairs showed no change and published zero between bursts (seen in the live logs, October 2026). Over the window, bursts average out, and the rate falls to zero two minutes after tokens stop.
-- No new reading for a limits-only ingest (it carries `updatedAt` forward) or one out of order, so nothing is published. A new day, a counter that went backwards or a gap over an hour starts the window again; the first reading only establishes a baseline. Windows live in memory, so an evicted object starts again from the previous stored record.
-- The account rate sums each device's latest rate while it is fresh: twice the device's `syncUploadIntervalMs`, at least 2 minutes.
-
-Resolution depends on upload cadence: the widget uploads every few seconds while active, a headless agent may upload every 20 minutes (its window then spans its last interval).
+- Each device keeps a window of readings (when the Hub received the upload, by its own clock; when the device read it; counted tokens today): those within a minute of the latest, and the one before them. The rate is the increase from the last reading at or before a minute ago (or the window's first) to the latest, over the time from that reading to now. Not consecutive uploads: tokens arrive a turn at a time while the widget uploads every 7–20 s, so most consecutive pairs showed no change and published zero between bursts (seen in the live logs, October 2026).
+- Measured to now, not to the latest upload, so it winds down even when uploads stop. While the account's rate is above zero, an alarm publishes it every 10 s; it reaches zero a minute after the last tokens, is published once more, and the alarm stops. Each publish puts the next tick off, so an active widget's uploads publish and the tick only fills gaps.
+- No new reading for a limits-only ingest (it carries `updatedAt` forward) or one out of order, so nothing is published. A new day, a counter that went backwards or a gap over an hour starts the window again; a lone reading is only a baseline. Windows are stored, because the live Hub was seen restarting every minute or so.
+- The account rate sums the devices that have uploaded in the last ten minutes. A headless agent uploading every 20 minutes shows its last interval's rate for a minute after each upload.
 
 ## Syndication
 

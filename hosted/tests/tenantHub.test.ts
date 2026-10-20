@@ -14,22 +14,31 @@ const ingest = (minute: number, totalTokens: number) => ({
   next: record(`2026-10-20T10:0${minute}:00Z`, totalTokens),
 })
 
+let clock = Date.parse('2026-10-20T10:03:00Z')
+
 function tenantHub(storage = new Map<string, unknown>(), answers: (boolean | Promise<boolean>)[] = []) {
   const published: unknown[] = []
+  const alarms: number[] = []
   const state = {
     id: { name: 'user_1' },
     storage: {
+      setAlarm: async (at: number) => void alarms.push(at),
+      deleteAlarm: async () => void alarms.push(-1),
       get: async (key: string) => storage.get(key),
       put: async (key: string, value: unknown) => void storage.set(key, value),
       list: async ({ prefix }: { prefix?: string } = {}) => new Map([...storage].filter(([key]) => !prefix || key.startsWith(prefix))),
     },
   }
   const HAWTHORN = { publish: async (_userId: string, event: unknown) => (published.push(event), answers.shift() ?? true) }
-  return { hub: new TenantHub(state as never, { HAWTHORN } as never), published, storage }
+  const hub = new TenantHub(state as never, { HAWTHORN } as never)
+  // The hub's clock: just after the latest test reading.
+  hub.now = () => clock
+  return { hub, published, storage, alarms }
 }
 
 test('publishes only once subscribed, and subscribing returns the rate now', async () => {
   const { hub, published } = tenantHub()
+  clock = Date.parse('2026-10-20T10:01:00Z')
   await hub.onIngested(ingest(1, 2000))
   assert.equal(published.length, 0)
   assert.equal((await hub.subscribe()).tokensPerMinute, 1000)
@@ -72,10 +81,28 @@ test('a restarted Hub carries on from the stored window', async () => {
   const storage = new Map<string, unknown>()
   const { hub } = tenantHub(storage)
   await hub.subscribe()
-  await hub.onIngested(ingest(1, 2000))
-  await hub.onIngested(ingest(2, 3000))
+  clock = Date.parse('2026-10-20T10:00:30Z')
+  await hub.onIngested({ deviceId: 'mac', previous: record('2026-10-20T10:00:00Z', 1000), next: record('2026-10-20T10:00:30Z', 2000) })
   const restarted = tenantHub(storage)
-  await restarted.hub.onIngested({ deviceId: 'mac', previous: record('2026-10-20T10:02:00Z', 3000), next: record('2026-10-20T10:03:00Z', 3000) })
-  // Over the stored two-minute window (10:01 → 10:03, 1000 tokens), not the one gap with no change, which reads 0.
-  assert.equal((restarted.published.at(-1) as { tokensPerMinute: number }).tokensPerMinute, 500)
+  clock = Date.parse('2026-10-20T10:00:45Z')
+  await restarted.hub.onIngested({ deviceId: 'mac', previous: record('2026-10-20T10:00:30Z', 2000), next: record('2026-10-20T10:00:45Z', 2000) })
+  // Over the stored window (10:00:00 → now, 1000 tokens in 45 s), not the one gap with no change, which reads 0.
+  assert.equal((restarted.published.at(-1) as { tokensPerMinute: number }).tokensPerMinute, 1333)
+})
+
+test('with no uploads, the 10-second tick winds the rate down to zero, then stops', async () => {
+  const { hub, published, alarms } = tenantHub()
+  await hub.subscribe()
+  clock = Date.parse('2026-10-20T10:00:30Z')
+  await hub.onIngested({ deviceId: 'mac', previous: record('2026-10-20T10:00:00Z', 1000), next: record('2026-10-20T10:00:30Z', 2000) })
+  assert.equal(alarms.at(-1), clock + 10_000)
+  const rates: number[] = []
+  for (let tick = 0; tick < 6; tick++) {
+    clock = alarms.at(-1)!
+    await hub.alarm()
+    rates.push((published.at(-1) as { tokensPerMinute: number }).tokensPerMinute)
+  }
+  // 1000 tokens from 10:00:00, over the time to each tick; zero a minute after the last tokens.
+  assert.deepEqual(rates, [1500, 1200, 1000, 857, 750, 0])
+  assert.equal(alarms.at(-1), Date.parse('2026-10-20T10:01:30Z'), 'no tick after zero')
 })

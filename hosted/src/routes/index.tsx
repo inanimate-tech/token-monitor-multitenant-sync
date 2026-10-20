@@ -89,15 +89,16 @@ function Home() {
           <h2>Live tokens per minute</h2>
           <p>
             When something of yours in {account.sink} uses Token Monitor, it subscribes to this account. Until nothing
-            there does, each upload from a device sends exactly this, and nothing else (
+            there does, each upload from a device, and every ten seconds while the rate is above zero, sends exactly this, and nothing else (
             <a href={sourceFile('syndication/sink.ts')}>event</a>, <a href={sourceFile('syndication/tokensPerMinute.ts')}>calculation</a>,{' '}
             <a href={sourceFile(`syndication/${account.sink}.ts`)}>destination</a>):
           </p>
           <pre>{JSON.stringify(EXAMPLE_EVENT, null, 2)}</pre>
           <p>
             <small>
-              The rate is how many tokens a device used over its last two minutes of uploads, not counting cache
-              reads. It is a live rate, so it differs from the widget's average over active time.
+              The rate is how many tokens your devices used over the last minute, not counting cache reads, sent again
+              every ten seconds while it is above zero, so it winds down when you stop. It is a live rate, so it differs from the widget's
+              average over active time.
             </small>
           </p>
         </>
