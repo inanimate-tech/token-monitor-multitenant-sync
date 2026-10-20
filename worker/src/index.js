@@ -1,3 +1,4 @@
+import { DurableObject } from 'cloudflare:workers';
 import { publicLimits } from './shared/limits/core.js';
 import subscriptionDisplay from './shared/subscriptionDisplay.js';
 import currency from './shared/currency.js';
@@ -93,10 +94,11 @@ export default {
   }
 };
 
-export class HubDO {
+// Extends DurableObject so an embedding Worker's subclass can add RPC methods.
+export class HubDO extends DurableObject {
   constructor(state, env) {
+    super(state, env);
     this.state = state;
-    this.env = env;
     this.sseClients = new Set();
     this.heartbeatTimer = null;
     this.broadcastTimer = null;

@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const test = require('node:test');
+require('../helpers/cloudflareWorkers');
 const zlib = require('node:zlib');
 
 function fakeState() {

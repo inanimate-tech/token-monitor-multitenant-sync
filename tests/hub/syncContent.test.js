@@ -6,6 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const test = require('node:test');
+require('../helpers/cloudflareWorkers');
 const net = require('node:net');
 const { spawn } = require('node:child_process');
 const { once } = require('node:events');

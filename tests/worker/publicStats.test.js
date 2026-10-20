@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const test = require('node:test');
+require('../helpers/cloudflareWorkers');
 
 test('public stats periods strip every project identity field', async () => {
   const worker = await import(pathToFileURL(path.resolve(__dirname, '../../worker/src/index.js')).href);
