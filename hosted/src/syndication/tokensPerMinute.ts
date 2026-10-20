@@ -3,7 +3,7 @@
 // rule for live rates: consecutive per-device counter deltas, where the first
 // snapshot only establishes a baseline.
 
-type DeviceRecord = {
+export type DeviceRecord = {
   updatedAt?: string
   syncUploadIntervalMs?: number
   periodWindows?: { today?: { key?: string } }

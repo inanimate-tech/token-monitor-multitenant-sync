@@ -25,8 +25,18 @@ async function hub(request: Request): Promise<Response> {
     return json(200, { ok: true, role: 'hub', runtime: 'cloudflare-worker', version: 1, hubBuild: null, secretRequired: true, now: new Date().toISOString() })
   }
   const key = parseKey(requestKey(request))
-  if (!key || !(await resolveKey(key))) return json(401, { error: 'unauthorized' })
-  if (!(await env.HUB_LIMITER.limit({ key: key.accountId })).success) return json(429, { error: 'rate_limited' })
+  const { pathname } = new URL(request.url)
+  if (!key || !(await resolveKey(key))) {
+    console.log(JSON.stringify({ tm: 'refused', status: 401, method: request.method, pathname }))
+    return json(401, { error: 'unauthorized' })
+  }
+  if (!(await env.HUB_LIMITER.limit({ key: key.accountId })).success) {
+    console.log(JSON.stringify({ tm: 'refused', status: 429, account: key.accountId, method: request.method, pathname }))
+    return json(429, { error: 'rate_limited' })
+  }
+  if (request.method === 'POST' && pathname === '/api/ingest') {
+    console.log(JSON.stringify({ tm: 'ingest', account: key.accountId, bytes: Number(request.headers.get('content-length')) || null }))
+  }
   if (Number(request.headers.get('content-length')) > MAX_BODY_BYTES) return json(413, { error: 'payload_too_large' })
   return env.HUB.getByName(key.accountId).fetch(request)
 }

@@ -1,6 +1,9 @@
 import { HubDO } from '../../../worker/src/index.js'
 import { usageSink, type UsageEvent } from '../syndication/sink.ts'
-import { accountRate, deviceRate, tokensPerMinute, type DeviceRate } from '../syndication/tokensPerMinute.ts'
+import { accountRate, deviceRate, tokensPerMinute, type DeviceRate, type DeviceRecord } from '../syndication/tokensPerMinute.ts'
+
+// Debugging the live rate: one JSON line per step, read with `wrangler tail` or Workers Logs.
+const log = (step: string, data: object) => console.log(JSON.stringify({ tm: step, ...data }))
 
 // The upstream Hub, unchanged, one per account (named by account id).
 export class TenantHub extends HubDO {
@@ -20,30 +23,61 @@ export class TenantHub extends HubDO {
   async subscribe(): Promise<UsageEvent> {
     this.subscribes++
     await this.state.storage.put('subscribed', (this.subscribed = true))
-    return this.event(Date.now())
+    const event = this.event(Date.now())
+    log('subscribe', { account: this.state.id.name, event })
+    return event
   }
 
   // When a device last uploaded, or null: for the sink's status check, which doesn't subscribe.
   async lastUploadAt(): Promise<string | null> {
     const devices: { receivedAt?: string }[] = await this.listDevices()
-    return devices.flatMap((d) => (d.receivedAt ? [d.receivedAt] : [])).sort().at(-1) ?? null
+    const last = devices.flatMap((d) => (d.receivedAt ? [d.receivedAt] : [])).sort().at(-1) ?? null
+    log('status', { account: this.state.id.name, devices: devices.length, lastUploadAt: last })
+    return last
   }
 
-  async onIngested({ deviceId, previous, next }: { deviceId: string; previous: object | null; next: object }) {
+  async onIngested({ deviceId, previous, next }: { deviceId: string; previous: DeviceRecord | null; next: DeviceRecord }) {
     const sink = usageSink(this.env)
     const accountId = this.state.id.name
-    if (!sink || !accountId) return
     const rate = tokensPerMinute(previous, next)
+    log('ingested', {
+      account: accountId,
+      deviceId,
+      sink: sink?.name ?? null,
+      previousAt: previous?.updatedAt ?? null,
+      nextAt: next.updatedAt ?? null,
+      ms: previous ? Date.parse(next.updatedAt ?? '') - Date.parse(previous.updatedAt ?? '') : null,
+      day: [previous?.periodWindows?.today?.key ?? null, next.periodWindows?.today?.key ?? null],
+      today: [previous?.periods?.today?.totalTokens ?? null, next.periods?.today?.totalTokens ?? null],
+      uploadIntervalMs: next.syncUploadIntervalMs ?? null,
+      rate,
+      ratesHeld: this.rates.size,
+    })
+    if (!sink || !accountId) return
     if (rate === null) return
     const now = Date.now()
     this.rates.set(deviceId, deviceRate(rate, next, now))
     this.subscribed ??= (await this.state.storage.get<boolean>('subscribed')) ?? false
-    if (!this.subscribed) return
+    if (!this.subscribed) {
+      log('not-subscribed', { account: accountId })
+      return
+    }
     // The sink answers whether anyone is still subscribed. A subscribe that
     // arrived while it answered wins.
     const subscribes = this.subscribes
-    if (!(await sink.publish(accountId, this.event(now))) && subscribes === this.subscribes) {
+    const event = this.event(now)
+    const t0 = Date.now()
+    let listening: boolean
+    try {
+      listening = await sink.publish(accountId, event)
+    } catch (error) {
+      log('publish-failed', { account: accountId, event, error: String(error), ms: Date.now() - t0 })
+      throw error
+    }
+    log('published', { account: accountId, event, listening, ms: Date.now() - t0 })
+    if (!listening && subscribes === this.subscribes) {
       await this.state.storage.put('subscribed', (this.subscribed = false))
+      log('unsubscribed', { account: accountId })
     }
   }
 
