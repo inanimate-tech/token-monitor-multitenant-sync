@@ -19,7 +19,8 @@ export type UsageSink = { name: string; publish(accountId: string, event: UsageE
 
 // No sink unless one is bound; a deployment without bindings sends nothing anywhere.
 export function usageSink(env: Env): UsageSink | null {
-  const { HAWTHORN } = env as { HAWTHORN?: Parameters<typeof hawthornSink>[0] }
+  // A binding to another Worker's entrypoint is typed as a plain Service.
+  const { HAWTHORN } = env as unknown as { HAWTHORN?: Parameters<typeof hawthornSink>[0] }
   return HAWTHORN ? hawthornSink(HAWTHORN) : null
 }
 
