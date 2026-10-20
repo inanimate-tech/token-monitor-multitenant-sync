@@ -31,7 +31,8 @@ jobs:
           cache: npm
           cache-dependency-path: hosted/package-lock.json
       - run: npm ci
+      # Builds first: the build generates src/routeTree.gen.ts, which typecheck needs.
+      - run: npm run build
       - run: npm run typecheck
       - run: npm test
-      - run: npm run build
 
