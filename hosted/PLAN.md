@@ -59,15 +59,14 @@ Until upstream registers a build containing the hooks, `/api/health` reports `hu
 
 A live rate, not the widget's active-time average (`tokenBurnPerMinute` in `src/electron/renderer/tokenRatePresentation.js` is `timedTokens / timedDurationMs`); the page says the two differ.
 
-Per device, over the stored records `onIngested` receives, following upstream's rule for live model rates ("consecutive per-device counter deltas; the first available snapshot establishes a baseline"):
+Per device, over a sliding two-minute window of the readings `onIngested` sees (a reading: `updatedAt` and today's counted tokens):
 
-- Same day (`periodWindows.today.key` equal): `(next − previous).periods.today.totalTokens / minutes(previous.updatedAt → next.updatedAt)`.
-- No rate for a first record, a day rollover, a counter that went backwards, an interval over an hour, or a limits-only ingest (it carries `updatedAt` forward, so the interval is zero).
-- The account rate sums each device's latest rate while it is fresh: twice the device's `syncUploadIntervalMs`, at least 2 minutes. Rates live in memory, so an evicted object restarts from baselines.
+- Counted tokens are `totalTokens − cacheReadTokens`. Live data showed cache reads dominate the total (about a million a minute while working), which isn't what people mean.
+- The rate is the change in counted tokens from the window's first reading to its last, over the time between them. The window keeps the readings within two minutes of the latest and the one before them. Not consecutive uploads: tokens arrive a turn at a time while the widget uploads every 7–20 s, so most consecutive pairs showed no change and published zero between bursts (seen in the live logs, October 2026). Over the window, bursts average out, and the rate falls to zero two minutes after tokens stop.
+- No new reading for a limits-only ingest (it carries `updatedAt` forward) or one out of order, so nothing is published. A new day, a counter that went backwards or a gap over an hour starts the window again; the first reading only establishes a baseline. Windows live in memory, so an evicted object starts again from the previous stored record.
+- The account rate sums each device's latest rate while it is fresh: twice the device's `syncUploadIntervalMs`, at least 2 minutes.
 
-Resolution depends on upload cadence: the widget uploads every few seconds while active, a headless agent may upload every 20 minutes.
-
-Open: whether `totalTokens` (cache reads dominate it) or `totalTokens − cacheReadTokens` better matches what users mean. Decide with real data.
+Resolution depends on upload cadence: the widget uploads every few seconds while active, a headless agent may upload every 20 minutes (its window then spans its last interval).
 
 ## Syndication
 

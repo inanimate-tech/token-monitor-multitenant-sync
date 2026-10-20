@@ -1,6 +1,6 @@
 import { HubDO } from '../../../worker/src/index.js'
 import { usageSink, type UsageEvent } from '../syndication/sink.ts'
-import { accountRate, deviceRate, tokensPerMinute, type DeviceRate, type DeviceRecord } from '../syndication/tokensPerMinute.ts'
+import { accountRate, deviceRate, nextWindow, windowRate, type DeviceRate, type DeviceRecord, type Reading } from '../syndication/tokensPerMinute.ts'
 
 // Debugging the live rate: one JSON line per step, read with `wrangler tail` or Workers Logs.
 const log = (step: string, data: object) => console.log(JSON.stringify({ tm: step, ...data }))
@@ -10,6 +10,8 @@ export class TenantHub extends HubDO {
   declare state: DurableObjectState
   declare env: Env
   rates = new Map<string, DeviceRate>()
+  // Each device's recent readings; in memory, so an evicted Hub starts again from the previous record.
+  windows = new Map<string, Reading[]>()
   subscribed?: boolean
   subscribes = 0
 
@@ -39,16 +41,18 @@ export class TenantHub extends HubDO {
   async onIngested({ deviceId, previous, next }: { deviceId: string; previous: DeviceRecord | null; next: DeviceRecord }) {
     const sink = usageSink(this.env)
     const accountId = this.state.id.name
-    const rate = tokensPerMinute(previous, next)
+    const window = nextWindow(this.windows.get(deviceId) ?? [], previous, next)
+    if (window) this.windows.set(deviceId, window)
+    const rate = window ? windowRate(window) : null
     log('ingested', {
       account: accountId,
       deviceId,
       sink: sink?.name ?? null,
       previousAt: previous?.updatedAt ?? null,
       nextAt: next.updatedAt ?? null,
-      ms: previous ? Date.parse(next.updatedAt ?? '') - Date.parse(previous.updatedAt ?? '') : null,
-      day: [previous?.periodWindows?.today?.key ?? null, next.periodWindows?.today?.key ?? null],
-      today: [previous?.periods?.today?.totalTokens ?? null, next.periods?.today?.totalTokens ?? null],
+      newReading: !!window,
+      window: window && { readings: window.length, spanMs: window.at(-1)!.at - window[0].at, tokens: window.at(-1)!.tokens - window[0].tokens },
+      day: next.periodWindows?.today?.key ?? null,
       uploadIntervalMs: next.syncUploadIntervalMs ?? null,
       rate,
       ratesHeld: this.rates.size,

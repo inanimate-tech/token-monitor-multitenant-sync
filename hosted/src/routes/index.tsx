@@ -96,8 +96,8 @@ function Home() {
           <pre>{JSON.stringify(EXAMPLE_EVENT, null, 2)}</pre>
           <p>
             <small>
-              The rate is the change in a device's tokens today between two consecutive uploads, divided by the time
-              between them. It is a live rate, so it differs from the widget's average over active time.
+              The rate is how many tokens a device used over its last two minutes of uploads, not counting cache
+              reads. It is a live rate, so it differs from the widget's average over active time.
             </small>
           </p>
         </>
