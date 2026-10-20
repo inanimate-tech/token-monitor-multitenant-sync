@@ -14,12 +14,11 @@ async function account() {
 export const loadAccount = createServerFn().handler(async () => {
   if (!(await auth()).userId) return null
   const { stub } = await account()
-  const sinkName = usageSink(env)?.name
   return {
     hubUrl: new URL(getRequest().url).origin,
     keys: await stub.listKeys(),
-    // null when this deployment has no sink, so there is nothing to opt into.
-    syndication: sinkName ? { sink: sinkName, enabled: await stub.syndication() } : null,
+    // null when this deployment has no sink, so nothing is ever sent.
+    sink: usageSink(env)?.name ?? null,
   }
 })
 
@@ -33,7 +32,3 @@ export const createKey = createServerFn({ method: 'POST' })
 export const revokeKey = createServerFn({ method: 'POST' })
   .validator((id: string) => String(id))
   .handler(async ({ data }) => (await account()).stub.revokeKey(data))
-
-export const setSyndication = createServerFn({ method: 'POST' })
-  .validator((enabled: boolean) => enabled === true)
-  .handler(async ({ data }) => (await account()).stub.setSyndication(data))

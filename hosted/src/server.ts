@@ -5,6 +5,7 @@ import { createKeyResolver, parseKey, requestKey } from './auth/keys.ts'
 
 export { Account } from './account/Account.ts'
 export { TenantHub } from './hub/TenantHub.ts'
+export { Subscriptions } from './syndication/sink.ts'
 
 // The front door. /api/* is the Token Monitor Hub API, served per account by
 // TenantHub once the key is verified; everything else is the website.

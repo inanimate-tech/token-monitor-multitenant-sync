@@ -8,7 +8,7 @@ Everything a user interacts with — the website, key handling, the tokens-per-m
 
 - Every signed-in user gets an isolated Hub (devices, live stream, subscriptions, sync settings) with no change to the desktop widget or headless agent: they paste a Hub URL and a key into the existing fields.
 - Keys are issued, listed and revoked on a minimal website behind Clerk sign-in. No D1; key storage is Durable Object RPC.
-- Optional, opt-in syndication of live tokens per minute to an external sink. hawthorn is the first sink and is named only in its sink module.
+- Optional syndication of live tokens per minute to an external sink, while the sink subscribes to the account. hawthorn is the first sink and is named only in its sink module.
 - Upstream (`Javis603/token-monitor`) receives only generic extension points; nothing hosted-, Clerk- or hawthorn-specific.
 - Not in scope: web dashboards of usage, OAuth in the widget, read-only/write-only key scopes (possible follow-up).
 
@@ -20,7 +20,7 @@ widget / agent ──Bearer tmk.…──▶ hosted Worker (tokens.<domain>)
                                    ├─ /api/health          answered here, reveals no tenant
                                    ├─ /api/*               key ─▶ Account(userId).verify(hash) ─▶ rate limit ─▶ size limit
                                    │                        └─▶ TenantHub(userId)  (upstream HubDO subclass)
-                                   │                              └─ onIngested ─▶ UsageSink (opt-in)
+                                   │                              └─ onIngested ─▶ UsageSink (while subscribed)
                                    └─ everything else      TanStack Start site (Clerk sign-in)
                                                             └─ server functions ─▶ Account(userId) RPC
 ```
@@ -30,13 +30,13 @@ One Worker, one host. `src/server.ts` is Wrangler's `main`: it wraps TanStack St
 ```
 src/server.ts                  front door + Durable Object exports
 src/auth/keys.ts               key format, minting, hashing, request key, cached resolver
-src/account/Account.ts         key hashes and syndication opt-in (RPC)
+src/account/Account.ts         key hashes (RPC)
 src/account/api.ts             the website's server functions
 src/hub/TenantHub.ts           upstream HubDO through its two hooks
 src/routes/                    root layout (source footer) and the one account page
 src/syndication/
   tokensPerMinute.ts           the only rate calculation
-  sink.ts                      UsageEvent, UsageSink, selection by binding
+  sink.ts                      UsageEvent, UsageSink, selection by binding, Subscriptions entrypoint
   hawthorn.ts                  the only hawthorn-specific code
 ```
 
@@ -72,12 +72,14 @@ Open: whether `totalTokens` (cache reads dominate it) or `totalTokens − cacheR
 ## Syndication
 
 - `usageSink(env)` returns the hawthorn sink when `HAWTHORN` is bound, otherwise null: a deployment without bindings sends nothing anywhere.
-- Published only for accounts that opted in (default off). `UsageEvent` is the entire payload — no titles, projects, costs or records. The sink's `name` is what the opt-in shows, and the page links to `sink.ts`, `tokensPerMinute.ts` and the sink's own file at the deployed commit.
-- hawthorn side (not in this repo): a `TokenMonitorUsage` `WorkerEntrypoint` with `publish(userId, event)`, forwarding to `UserAgent(idFromName(userId))`.
+- Publish and subscribe. The sink subscribes to an account through the `Subscriptions` entrypoint (`subscribe(accountId)`, which returns the current event); `TenantHub` keeps a stored `subscribed` flag and publishes on each ingest only while it is set. `publish` answers whether the account still has a subscriber; `false` clears the flag until the sink subscribes again, so there is no unsubscribe call, and a subscribe that arrives while a publish is answering wins. The entrypoint offers only `subscribe`, so a bound sink never reaches a Hub's data routes.
+- Consent is the sink's: hawthorn subscribes when the user has a device using it. There is no opt-in here; the page says what is sent and when. `UsageEvent` is the entire payload — no titles, projects, costs or records. The page names the sink and links to `sink.ts`, `tokensPerMinute.ts` and the sink's own file at the deployed commit.
+- Throttling what devices receive, and showing zero once uploads stop, are the sink's: the sink sees every event and knows its subscribers. This Worker stays a flag and a call.
+- hawthorn side (not in this repo): a `TokenMonitorUsage` `WorkerEntrypoint` with `publish(userId, event): boolean`, forwarding to `UserAgent(userId)`, and a binding to `Subscriptions`.
 
 ## Website
 
-One page: sign in; Hub URL and setup instructions; create (shown once), list and revoke keys; the syndication opt-in with an example payload. The footer links the deployed commit. Server functions take the user only from the Clerk session; TanStack Start's default CSRF middleware covers them.
+One page: sign in; Hub URL and setup instructions; create (shown once), list and revoke keys; what a subscribed sink receives, with an example payload. The footer links the deployed commit. Server functions take the user only from the Clerk session; TanStack Start's default CSRF middleware covers them.
 
 Deploys are Cloudflare Workers Builds from the public `multitenant` branch, and the footer links the commit each build came from. Build logs stay in the Cloudflare dashboard, so users cannot verify deployed bytes independently; `.github/workflows/hosted.yml` only runs the checks.
 
@@ -86,7 +88,7 @@ Deploys are Cloudflare Workers Builds from the public `multitenant` branch, and 
 1. Upstream hooks — done, not yet offered upstream (`UPSTREAM.md`).
 2. Multitenant Hub — done. Checked against `wrangler dev`: health, CORS preflight, unknown and malformed keys, two-account isolation, `?secret=`, size limit, live stream, revocation.
 3. Website — done; needs Clerk keys to run.
-4. Tokens per minute and sink — done. Checked end to end with a stand-in sink: no events before opt-in or for other accounts, correct per-device and summed rates.
+4. Tokens per minute and sink — done; publish and subscribe in `tests/tenantHub.test.ts`, and `Subscriptions` → `TenantHub.subscribe()` checked over a real service binding in `wrangler dev`.
 5. hawthorn — `hawthorn.ts` done; the hawthorn-worker entrypoint is a separate change there.
 
 ## Decisions taken
@@ -94,6 +96,7 @@ Deploys are Cloudflare Workers Builds from the public `multitenant` branch, and 
 - Durable Object RPC for key storage, no D1.
 - `accountId` = Clerk `userId`.
 - Live delta-based tokens per minute.
+- Publish while a sink subscribes, rather than a per-account opt-in; `HubDO` extends `DurableObject` (`UPSTREAM.md`) so `TenantHub` takes RPC.
 - One Worker serving site and Hub on one host.
 - hawthorn named only in `hosted/src/syndication/hawthorn.ts`.
 - Hook named `onIngested`: token-monitor names after-the-fact callbacks `on` + past tense (`onPersisted`, `onClosed`); it mirrors the agent's `onRecord`. `authorize` is a decision, so it has no prefix.

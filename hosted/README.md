@@ -18,7 +18,7 @@ You need a Cloudflare account and a [Clerk](https://clerk.com) application. Noth
 
 It uses Durable Objects only — no KV, D1 or other services. Add a custom domain in the dashboard; with a production Clerk instance, sign-in works on subdomains of the Clerk app's domain. The footer links the deployed commit (`WORKERS_CI_COMMIT_SHA` on Workers Builds, the local checkout otherwise), so deploy from pushed commits.
 
-Optional: bind a usage sink (see `src/syndication/` and the commented binding in `wrangler.jsonc`) to offer users an opt-in that sends their live tokens per minute to it. Without one, nothing is sent anywhere.
+Optional: bind a usage sink (see `src/syndication/` and the commented binding in `wrangler.jsonc`). It receives an account's live tokens per minute while it subscribes to that account through the `Subscriptions` entrypoint. Without one, nothing is sent anywhere.
 
 ## Develop
 

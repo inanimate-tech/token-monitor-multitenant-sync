@@ -1,8 +1,7 @@
 import { DurableObject } from 'cloudflare:workers'
 import { hashKey, mintKey } from '../auth/keys.ts'
 
-// One per signed-in user, named by Clerk userId. Holds only key hashes, plus the
-// user's syndication opt-in. Reached by RPC from the front door (verify) and the
+// One per signed-in user, named by Clerk userId. Holds only key hashes. Reached by RPC from the front door (verify) and the
 // website's server functions (everything else).
 type StoredKey = { id: string; label: string; hash: string; createdAt: string; lastUsedAt: string | null }
 export type KeySummary = Omit<StoredKey, 'hash'>
@@ -53,13 +52,5 @@ export class Account extends DurableObject<Env> {
 
   async revokeKey(id: string): Promise<void> {
     await this.ctx.storage.put('keys', (await this.keys()).filter((k) => k.id !== id))
-  }
-
-  async syndication(): Promise<boolean> {
-    return (await this.ctx.storage.get<boolean>('syndication')) ?? false
-  }
-
-  async setSyndication(enabled: boolean): Promise<void> {
-    await this.ctx.storage.put('syndication', enabled === true)
   }
 }

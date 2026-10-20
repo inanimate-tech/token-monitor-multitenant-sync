@@ -1,7 +1,7 @@
 import { SignInButton } from '@clerk/tanstack-react-start'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
-import { createKey, loadAccount, revokeKey, setSyndication } from '../account/api.ts'
+import { createKey, loadAccount, revokeKey } from '../account/api.ts'
 
 export const Route = createFileRoute('/')({ loader: () => loadAccount(), component: Home })
 
@@ -84,21 +84,14 @@ function Home() {
         </small>
       </p>
 
-      {account.syndication && (
+      {account.sink && (
         <>
           <h2>Live tokens per minute</h2>
-          <label>
-            <input
-              type="checkbox"
-              checked={account.syndication.enabled}
-              onChange={async (e) => { await setSyndication({ data: e.target.checked }); await refresh() }}
-            />{' '}
-            Send my live tokens per minute to {account.syndication.sink}
-          </label>
           <p>
-            Off by default. When on, each upload from a device sends exactly this, and nothing else (
+            When something of yours in {account.sink} uses Token Monitor, it subscribes to this account. Until nothing
+            there does, each upload from a device sends exactly this, and nothing else (
             <a href={sourceFile('syndication/sink.ts')}>event</a>, <a href={sourceFile('syndication/tokensPerMinute.ts')}>calculation</a>,{' '}
-            <a href={sourceFile(`syndication/${account.syndication.sink}.ts`)}>destination</a>):
+            <a href={sourceFile(`syndication/${account.sink}.ts`)}>destination</a>):
           </p>
           <pre>{JSON.stringify(EXAMPLE_EVENT, null, 2)}</pre>
           <p>
